@@ -56,5 +56,9 @@ export default [
 			'no-case-declarations': 'off', // 关闭 case 声明检查规则
 			'no-constant-condition': 'off' // 关闭常量条件检查规则
 		}
+	},
+	{
+		// 文件忽略规则
+		ignores: ['**/*.md', 'README.md']
 	}
 ];
