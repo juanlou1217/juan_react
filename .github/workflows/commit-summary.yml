@@ -15,7 +15,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run GPT Commit Summarizer
-        uses: KanHarI/gpt-commit-summarizer@v2
+        uses: KanHarI/gpt-commit-summarizer@master
         with:
           openai-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
           openai-base-url: 'https://api.deepseek.com'
