@@ -4,7 +4,8 @@ on:
   push:
     branches: [master]
     paths-ignore:
-      - 'notes-react/commit_summary.md' 
+      - 'notes-react/commit_summary.md'
+      - 'notes-react/ai-notes/**'
 
 jobs:
   summarize:
@@ -14,90 +15,159 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run GPT Commit Summarizer
-        uses: KanHarI/gpt-commit-summarizer@master
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          openai-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
-          openai-base-url: 'https://api.deepseek.com'
-          mode: "commit"
-          output-file: "notes-react/commit_notes.md"
-          max-commits: 1  
-          exclude-merge: true 
-          
-          custom-prompt: |
-            我正在手写 React 源码来深入学习 React 的内部实现原理。请分析这次提交，生成有助于理解 React 源码的学习笔记：
-            
-            ## 🔧 技术实现
-            - 具体实现了React 源码中什么功能或特性
-            - 涉及了哪些重要的 React 概念 
-            
-            ## 💡 设计思路  
-            - 为什么选择这种实现方式
-            - 有实现什么优化
-            
-            ## 📚 源码学习收获
-            - 通过手写这部分代码，对 React 内部机制有了什么新的理解？
-            - 这个实现帮助理解了 React 的哪些工作原理？
-            - 发现了哪些之前不知道的 React 内部细节？
-            - 这个知识点如何连接到 React 的整体架构中？
-  
-            
-            请用中文回答，重点突出对 React 源码理解的帮助，内容要深入且实用。
+          node-version: '18'
 
-      - name: Format and Commit Notes
+      - name: Install dependencies
+        run: |
+          npm install openai dayjs
+
+      - name: Create AI commit analysis script
+        run: |
+          cat > analyze-commit.js << 'EOF'
+          import fs from 'fs';
+          import { execSync } from 'child_process';
+          import dayjs from 'dayjs';
+          import OpenAI from 'openai';
+
+          const openai = new OpenAI({
+            baseURL: 'https://api.deepseek.com',
+            apiKey: process.env.DEEPSEEK_API_KEY
+          });
+
+          async function analyzeCommit() {
+            try {
+              // 获取最新提交的信息
+              const commitHash = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+              const commitMsg = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+              const commitAuthor = execSync('git log -1 --pretty=%an', { encoding: 'utf-8' }).trim();
+              const commitDate = dayjs().format('YYYY-MM-DD HH:mm:ss');
+              
+              // 获取提交的文件变更
+              const changedFiles = execSync('git diff-tree --no-commit-id --name-only -r HEAD', { encoding: 'utf-8' })
+                .trim().split('\n').filter(f => f);
+              
+              // 获取提交的差异（限制长度）
+              const diff = execSync('git show HEAD --format="" --no-color', { encoding: 'utf-8' }).substring(0, 8000);
+              
+              // 构建 AI 分析提示
+              const prompt = `
+          我正在手写 React 源码来深入学习 React 的内部实现原理。请分析这次提交，生成有助于理解 React 源码的学习笔记：
+
+          ## 📝 提交信息
+          **提交**: ${commitHash.substring(0, 8)}
+          **消息**: ${commitMsg}
+          **作者**: ${commitAuthor}
+          **时间**: ${commitDate}
+          **变更文件**: ${changedFiles.join(', ')}
+
+          ## 💻 代码变更
+          \`\`\`diff
+          ${diff}
+          \`\`\`
+
+          请生成详细的学习总结，包含以下内容：
+
+          ## 🔧 技术实现
+          - 具体实现了React 源码中什么功能或特性
+          - 涉及了哪些重要的 React 概念 
+
+          ## 💡 设计思路  
+          - 为什么选择这种实现方式
+          - 有实现什么优化
+
+          ## 📚 源码学习收获
+          - 通过手写这部分代码，对 React 内部机制有了什么新的理解？
+          - 这个实现帮助理解了 React 的哪些工作原理？
+          - 发现了哪些之前不知道的 React 内部细节？
+          - 这个知识点如何连接到 React 的整体架构中？
+
+          请用中文回答，重点突出对 React 源码理解的帮助，内容要深入且实用。
+          `;
+
+              // 调用 AI 生成分析
+              const response = await openai.chat.completions.create({
+                model: 'deepseek-chat',
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.7,
+                max_tokens: 4000
+              });
+
+              const analysis = response.choices[0].message.content.trim();
+              
+              // 创建格式化的总结
+              const summary = `
+          ============================================================
+          📅 ${commitDate} - 提交 ${commitHash.substring(0, 8)}
+          ============================================================
+
+          # 📝 ${commitMsg}
+
+          > **提交**: \`${commitHash.substring(0, 8)}\` | **时间**: ${commitDate} | **作者**: ${commitAuthor}
+
+          ${analysis}
+
+          ------------------------------------------------------------
+
+          `;
+
+              // 确保目录存在
+              if (!fs.existsSync('notes-react')) {
+                fs.mkdirSync('notes-react', { recursive: true });
+              }
+
+              // 如果是第一次创建文件，添加头部
+              if (!fs.existsSync('notes-react/commit_summary.md')) {
+                const header = `# 🤖 React 源码学习笔记
+
+          > 手写 React 源码的学习记录，专注于理解 React 内部实现原理
+          > 
+          > **学习目标**: 深入理解 React 的核心机制、设计思路和架构原理
+
+          `;
+                fs.writeFileSync('notes-react/commit_summary.md', header, 'utf-8');
+              }
+
+              // 将新总结添加到文件开头
+              const existingContent = fs.readFileSync('notes-react/commit_summary.md', 'utf-8');
+              const newContent = existingContent.replace(
+                /(# 🤖 React 源码学习笔记[\s\S]*?\n\n)/,
+                `$1${summary}`
+              );
+              
+              fs.writeFileSync('notes-react/commit_summary.md', newContent, 'utf-8');
+              
+              console.log('✅ Commit analysis completed and saved to notes-react/commit_summary.md');
+              
+            } catch (error) {
+              console.error('❌ Error analyzing commit:', error.message);
+              process.exit(1);
+            }
+          }
+
+          analyzeCommit();
+          EOF
+
+      - name: Run commit analysis
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          node analyze-commit.js
+
+      - name: Commit and Push Summary
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           
-          # 检查是否生成了新的总结
-          if [[ -f "notes-react/commit_notes.md" ]]; then
-            
-            # 获取提交信息
-            COMMIT_HASH=$(git rev-parse HEAD | cut -c1-8)
-            COMMIT_MSG=$(git log -1 --pretty=%s)
-            COMMIT_DATE=$(date +"%Y-%m-%d %H:%M")
-            COMMIT_AUTHOR=$(git log -1 --pretty=%an)
-            
-            # 创建格式化的笔记条目
-            cat > temp_note.md << EOF
-          
-          ============================================================
-          📅 ${COMMIT_DATE} - 提交 ${COMMIT_HASH}
-          ============================================================
-          
-          # 📝 ${COMMIT_MSG}
-          
-          > **提交**: \`${COMMIT_HASH}\` | **时间**: ${COMMIT_DATE} | **作者**: ${COMMIT_AUTHOR}
-          
-          $(cat notes-react/commit_notes.md)
-          
-          ------------------------------------------------------------
-          
-          EOF
-            
-            # 如果是第一次创建文件，添加专门的头部
-            if [[ ! -f "notes-react/commit_summary.md" ]]; then
-              cat > notes-react/commit_summary.md << EOF
-          # 🤖 React 源码学习笔记
-          
-          > 手写 React 源码的学习记录，专注于理解 React 内部实现原理
-          > 
-          > **学习目标**: 深入理解 React 的核心机制、设计思路和架构原理
-          
-          EOF
-            fi
-            
-            # 将新笔记追加到总结文件开头（最新的在上面）
-            cat temp_note.md notes-react/commit_summary.md > temp_combined.md
-            mv temp_combined.md notes-react/commit_summary.md
-            
-            # 清理临时文件
-            rm -f temp_note.md notes-react/commit_notes.md
-            
-            # 提交更新
+          # 检查是否有变更需要提交
+          if [[ -f "notes-react/commit_summary.md" ]]; then
             git add notes-react/commit_summary.md
             
             if ! git diff --staged --quiet; then
+              COMMIT_HASH=$(git rev-parse HEAD | cut -c1-8)
+              COMMIT_MSG=$(git log -1 --pretty=%s)
               git commit -m "📝 React源码学习: ${COMMIT_MSG} (${COMMIT_HASH}) [skip ci]"
               git push
               echo "✅ Commit summary updated and pushed"
@@ -105,5 +175,5 @@ jobs:
               echo "ℹ️  No changes to commit"
             fi
           else
-            echo "❌ commit_notes.md not found"
+            echo "❌ commit_summary.md not found"
           fi
