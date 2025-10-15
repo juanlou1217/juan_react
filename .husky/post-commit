@@ -1,0 +1,4 @@
+if [ "$AI_COMMIT_NOTE" = "true" ] || [ -z "$AI_COMMIT_NOTE" ]; then
+  echo "🤖 正在生成 AI 提交笔记..."
+  node script/ai-commit-note.js
+fi

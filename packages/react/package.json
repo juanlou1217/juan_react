@@ -1,0 +1,15 @@
+{
+  "name": "react",
+  "version": "1.0.0",
+  "description": "react公用方法,核心 API 与组件模型",
+  "module": "index.ts",
+  "dependencies": {
+    "shared": "workspace:*"
+  },
+
+
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.17.0"
+}

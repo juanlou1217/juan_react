@@ -1,0 +1,109 @@
+name: Commit Summary
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - 'notes-react/commit_summary.md' 
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run GPT Commit Summarizer
+        uses: KanHarI/gpt-commit-summarizer@v2
+        with:
+          openai-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
+          openai-base-url: 'https://api.deepseek.com'
+          mode: "commit"
+          output-file: "notes-react/commit_notes.md"
+          max-commits: 1  
+          exclude-merge: true 
+          
+          custom-prompt: |
+            我正在手写 React 源码来深入学习 React 的内部实现原理。请分析这次提交，生成有助于理解 React 源码的学习笔记：
+            
+            ## 🔧 技术实现
+            - 具体实现了React 源码中什么功能或特性
+            - 涉及了哪些重要的 React 概念 
+            
+            ## 💡 设计思路  
+            - 为什么选择这种实现方式
+            - 有实现什么优化
+            
+            ## 📚 源码学习收获
+            - 通过手写这部分代码，对 React 内部机制有了什么新的理解？
+            - 这个实现帮助理解了 React 的哪些工作原理？
+            - 发现了哪些之前不知道的 React 内部细节？
+            - 这个知识点如何连接到 React 的整体架构中？
+  
+            
+            请用中文回答，重点突出对 React 源码理解的帮助，内容要深入且实用。
+
+      - name: Format and Commit Notes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          
+          # 检查是否生成了新的总结
+          if [[ -f "notes-react/commit_notes.md" ]]; then
+            
+            # 获取提交信息
+            COMMIT_HASH=$(git rev-parse HEAD | cut -c1-8)
+            COMMIT_MSG=$(git log -1 --pretty=%s)
+            COMMIT_DATE=$(date +"%Y-%m-%d %H:%M")
+            COMMIT_AUTHOR=$(git log -1 --pretty=%an)
+            
+            # 创建格式化的笔记条目
+            cat > temp_note.md << EOF
+          
+          ============================================================
+          📅 ${COMMIT_DATE} - 提交 ${COMMIT_HASH}
+          ============================================================
+          
+          # 📝 ${COMMIT_MSG}
+          
+          > **提交**: \`${COMMIT_HASH}\` | **时间**: ${COMMIT_DATE} | **作者**: ${COMMIT_AUTHOR}
+          
+          $(cat notes-react/commit_notes.md)
+          
+          ------------------------------------------------------------
+          
+          EOF
+            
+            # 如果是第一次创建文件，添加专门的头部
+            if [[ ! -f "notes-react/commit_summary.md" ]]; then
+              cat > notes-react/commit_summary.md << EOF
+          # 🤖 React 源码学习笔记
+          
+          > 手写 React 源码的学习记录，专注于理解 React 内部实现原理
+          > 
+          > **学习目标**: 深入理解 React 的核心机制、设计思路和架构原理
+          
+          EOF
+            fi
+            
+            # 将新笔记追加到总结文件开头（最新的在上面）
+            cat temp_note.md notes-react/commit_summary.md > temp_combined.md
+            mv temp_combined.md notes-react/commit_summary.md
+            
+            # 清理临时文件
+            rm -f temp_note.md notes-react/commit_notes.md
+            
+            # 提交更新
+            git add notes-react/commit_summary.md
+            
+            if ! git diff --staged --quiet; then
+              git commit -m "📝 React源码学习: ${COMMIT_MSG} (${COMMIT_HASH}) [skip ci]"
+              git push
+              echo "✅ Commit summary updated and pushed"
+            else
+              echo "ℹ️  No changes to commit"
+            fi
+          else
+            echo "❌ commit_notes.md not found"
+          fi
