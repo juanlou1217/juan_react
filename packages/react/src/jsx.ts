@@ -21,12 +21,12 @@ const ReactElement = function (
 		type, // 元素类型
 		ref, // 元素引用
 		props, // 元素属性
-		_mark: 'juanlou'
+		_mark: '_juanlou'
 	};
 };
 
 // jsx 函数 参数 ： type, config, children
-export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
+export const jsx = (type: ElementType, config: any) => {
 	//  React 会从 config 中提取 key 和 ref，剩下的都放到 props 对象
 	let key: Key = null;
 	let ref: Ref = null;
@@ -50,17 +50,6 @@ export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
 		// 检查属性是否是 config 对象自身的属性， 防止原型链污染
 		if (Object.prototype.hasOwnProperty.call(config, prop)) {
 			props[prop] = val;
-		}
-	}
-
-	// 检测是否有子组件 ， 数组 或 单独
-	const maybeChildrenLength = maybeChildren.length;
-	if (maybeChildrenLength) {
-		if (maybeChildrenLength === 1) {
-			// 只有一个的时候，就扁平化 去除 []
-			props.children = maybeChildren[0];
-		} else {
-			props.children = maybeChildren;
 		}
 	}
 	return ReactElement(type, key, ref, props);

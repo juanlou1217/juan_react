@@ -18,17 +18,18 @@ export default [
 		output: {
 			file: `${pkgDistPath}/index.js`,
 			name: 'React',
-			format: 'umd'
+			format: 'umd' // UMD 格式（浏览器+Node都可用）
 		},
 		plugins: [
-			...getBaseRollupPlugins(),
+			...getBaseRollupPlugins(), // TS编译 + CommonJS转换
 			generatePackageJson({
+				// 自动生成 package.json
 				inputFolder: `${pkgPath}`,
 				outputFolder: `${pkgDistPath}`,
-				baseContents: (name, description, version) => ({
-					name,
-					description,
-					version,
+				baseContents: (pkg) => ({
+					name: pkg.name,
+					description: pkg.description,
+					version: pkg.version,
 					main: 'index.js'
 				})
 			})

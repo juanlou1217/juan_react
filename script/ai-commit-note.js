@@ -27,10 +27,13 @@ class LocalAICommitNote {
 	// 获取暂存区中的笔记文件变更
 	getNotesChanges() {
 		try {
-			// 获取暂存区中的所有变更文件
-			const stagedFiles = execSync('git diff --staged --name-only', {
-				encoding: 'utf-8'
-			})
+			// 检查最近一次提交
+			const stagedFiles = execSync(
+				'git diff-tree --no-commit-id --name-only -r HEAD',
+				{
+					encoding: 'utf-8'
+				}
+			)
 				.trim()
 				.split('\n')
 				.filter((f) => f);
@@ -51,7 +54,7 @@ class LocalAICommitNote {
 				try {
 					// 获取文件状态
 					const status = execSync(
-						`git diff --staged --name-status -- "${file}"`,
+						`git diff-tree --no-commit-id --name-status -r HEAD -- "${file}"`,
 						{ encoding: 'utf-8' }
 					).trim();
 					const statusChar = status.charAt(0);
@@ -65,7 +68,7 @@ class LocalAICommitNote {
 						diff = '新增笔记文件';
 					} else if (statusChar === 'M') {
 						// 修改文件 - 获取差异和当前内容
-						diff = execSync(`git diff --staged -- "${file}"`, {
+						diff = execSync(`git show HEAD -- "${file}"`, {
 							encoding: 'utf-8'
 						});
 						noteContent = execSync(`git show :${file}`, { encoding: 'utf-8' });
@@ -93,10 +96,13 @@ class LocalAICommitNote {
 	// 获取相关的代码变更
 	getCodeChanges() {
 		try {
-			// 获取除笔记外的其他代码文件变更
-			const allFiles = execSync('git diff --staged --name-only', {
-				encoding: 'utf-8'
-			})
+			// 获取最近一次提交中的代码文件变更
+			const allFiles = execSync(
+				'git diff-tree --no-commit-id --name-only -r HEAD',
+				{
+					encoding: 'utf-8'
+				}
+			)
 				.trim()
 				.split('\n')
 				.filter((f) => f);
@@ -116,7 +122,7 @@ class LocalAICommitNote {
 
 			// 获取代码文件的差异
 			const codeDiff = execSync(
-				'git diff --staged -- ' + codeFiles.map((f) => `"${f}"`).join(' '),
+				'git show HEAD -- ' + codeFiles.map((f) => `"${f}"`).join(' '),
 				{ encoding: 'utf-8' }
 			);
 
@@ -186,14 +192,7 @@ ${codeChanges.diff}
 - 发现了哪些之前不知道的技术细节
 - 这些知识点在 React 整体架构中的位置
 
-## 📚 知识连接
-- 本次学习如何与之前的知识点相连接
-- 为后续学习哪些模块打下了基础
-- 实际开发中可以如何应用这些知识
 
-## 🚀 学习收获
-- 最重要的收获和启发
-- 需要进一步深入的方向
 
 请用中文回答，内容要深入且实用，重点突出笔记与代码实践的结合。
 `;
